@@ -1,0 +1,35 @@
+# Dependencies
+node_modules
+npm-debug.log
+
+# Build output (we build in Docker)
+dist
+
+# Environment files (use secrets in production)
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+docs
+
+# Tests
+*.test.ts
+*.spec.ts
+__tests__
+coverage
+
+# Misc
+.DS_Store
+*.log

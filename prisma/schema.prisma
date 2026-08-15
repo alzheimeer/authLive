@@ -1,0 +1,189 @@
+// Prisma Schema for Traductor Auth Server
+// Better Auth manages user/session/account tables
+// We add custom tables for usage tracking, subscriptions, and multi-tenant support
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// Multi-Tenant Application Support
+// ============================================================================
+
+model Application {
+  id              String   @id @default(cuid())
+  clientId        String   @unique // Public identifier for the app
+  clientSecret    String   // Secret for server-to-server auth (hashed)
+  name            String   // Human-readable name
+  description     String?
+  allowedOrigins  String[] // Allowed CORS origins for this app
+  allowedRedirects String[] // Allowed OAuth redirect URLs
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  userApplications UserApplication[]
+  
+  @@map("application")
+}
+
+model UserApplication {
+  id          String   @id @default(cuid())
+  userId      String
+  appId       String
+  firstUsedAt DateTime @default(now())
+  lastUsedAt  DateTime @updatedAt
+  metadata    Json?    // App-specific user data
+  
+  user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  app  Application @relation(fields: [appId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, appId])
+  @@map("user_application")
+}
+
+// ============================================================================
+// Better Auth Core Tables (auto-managed by Better Auth CLI)
+// ============================================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  name          String?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  accounts         Account[]
+  sessions         Session[]
+  subscription     Subscription?
+  usageRecords     UsageRecord[]
+  userApplications UserApplication[]
+  
+  @@map("user")
+}
+
+model Account {
+  id                    String  @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?
+  password              String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([providerId, accountId])
+  @@map("account")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("session")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  @@map("verification")
+}
+
+// ============================================================================
+// Custom Tables for Traductor
+// ============================================================================
+
+// Subscription plans
+enum SubscriptionPlan {
+  BYOK_FREE    // Bring Your Own Key - Gratuito
+  STARTER      // $9.99/mes - 10 horas
+  PRO          // $19.99/mes - 30 horas
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  PAST_DUE
+  TRIALING
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  plan                 SubscriptionPlan   @default(BYOK_FREE)
+  status               SubscriptionStatus @default(ACTIVE)
+  stripeCustomerId     String?            @unique
+  stripeSubscriptionId String?            @unique
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("subscription")
+}
+
+// Usage tracking for rate limiting and billing
+model UsageRecord {
+  id              String   @id @default(cuid())
+  userId          String
+  sessionId       String?  // Translation session ID
+  audioMinutes    Float    @default(0)
+  tokensGenerated Int      @default(0)
+  date            DateTime @default(now()) @db.Date
+  createdAt       DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("usage_record")
+}
+
+// Ephemeral token tracking (for security auditing)
+model EphemeralTokenLog {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   // SHA-256 hash of token (never store actual token)
+  expiresAt DateTime
+  usedAt    DateTime?
+  revokedAt DateTime?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  
+  @@index([userId, createdAt])
+  @@index([tokenHash])
+  @@map("ephemeral_token_log")
+}

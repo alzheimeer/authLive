@@ -1,0 +1,146 @@
+# Docker Compose for Traductor Auth Server
+# 
+# This file provides local development environment and
+# serves as template for Hetzner migration.
+#
+# Usage:
+#   Development: docker-compose up -d postgres redis
+#   Full stack:  docker-compose up -d
+#
+# For Hetzner migration:
+#   1. Copy this file to server
+#   2. Update environment variables
+#   3. docker-compose up -d
+
+services:
+  # ============================================================================
+  # Application
+  # ============================================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3100:3100"
+    environment:
+      - NODE_ENV=production
+      - PORT=3100
+      # Database - use local PostgreSQL
+      - DATABASE_URL=postgresql://traductor:traductor_secret@postgres:5432/traductor_auth?schema=public
+      # Cache - use local Redis
+      - REDIS_URL=redis://redis:6379
+      # Auth
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://localhost:3100}
+      - TRUSTED_ORIGINS=${TRUSTED_ORIGINS:-tauri://localhost}
+      # OAuth (optional)
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      # Gemini
+      - GEMINI_MASTER_API_KEY=${GEMINI_MASTER_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - traductor-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ============================================================================
+  # PostgreSQL Database
+  # ============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: traductor-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: traductor
+      POSTGRES_PASSWORD: traductor_secret
+      POSTGRES_DB: traductor_auth
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Optional: init scripts
+      # - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+    networks:
+      - traductor-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U traductor -d traductor_auth"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # Redis Cache
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: traductor-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - traductor-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # Adminer (Database UI) - Development only
+  # ============================================================================
+  adminer:
+    image: adminer:latest
+    container_name: traductor-adminer
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    depends_on:
+      - postgres
+    networks:
+      - traductor-network
+    profiles:
+      - dev
+
+  # ============================================================================
+  # Redis Commander (Redis UI) - Development only
+  # ============================================================================
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: traductor-redis-commander
+    ports:
+      - "8081:8081"
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    depends_on:
+      - redis
+    networks:
+      - traductor-network
+    profiles:
+      - dev
+
+# ============================================================================
+# Networks & Volumes
+# ============================================================================
+networks:
+  traductor-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

@@ -1,0 +1,140 @@
+# Traductor Auth Server - Cursor Rules
+
+## Project Context
+Self-hosted Better Auth server for Traductor Desktop and other applications.
+Production URL: https://auth.niklauss.uk
+Uses Hexagonal Architecture (Ports & Adapters) for easy infrastructure swapping.
+
+## Tech Stack
+- Node.js 20 + TypeScript (ESM, NodeNext)
+- Hono (web framework)
+- Better Auth (authentication)
+- Prisma + Neon PostgreSQL
+- Upstash Redis (rate limiting, caching)
+- Docker (production)
+
+## Code Style
+
+### TypeScript
+- Use strict mode
+- ESM imports with `.js` extension (required for NodeNext)
+- Prefer `const` over `let`
+- Use explicit types for function parameters
+- Use async/await over .then()
+
+### Imports
+```typescript
+// CORRECT - ESM with .js extension
+import { auth } from './lib/auth.js';
+import { checkRateLimit } from './lib/redis.js';
+
+// WRONG - missing extension
+import { auth } from './lib/auth';
+```
+
+### Error Handling
+- Always catch errors in async functions
+- Return structured error responses: `{ error: string, code?: string }`
+- Log errors to console in development
+
+### API Responses
+```typescript
+// Success
+return c.json({ success: true, data: ... });
+
+// Error
+return c.json({ error: 'Message', code: 'ERROR_CODE' }, 400);
+```
+
+## File Structure
+```
+src/
+├── index.ts           # Server entry, middleware
+├── core/              # Hexagonal architecture
+│   ├── ports/         # Interfaces (IDatabasePort, ICachePort, IConfigPort)
+│   └── container.ts   # Dependency injection
+├── adapters/          # Port implementations
+│   ├── database/      # Prisma adapter
+│   ├── cache/         # Upstash/Redis adapters
+│   └── config/        # Env adapter
+├── lib/               # Shared utilities
+│   ├── auth.ts        # Better Auth config
+│   ├── redis.ts       # Upstash client
+│   └── tokens.ts      # JWT service
+└── routes/            # API routes
+    ├── auth.ts
+    ├── tokens.ts
+    └── usage.ts
+```
+
+## Integrating New Applications
+
+### Server-side
+1. Add origin to `TRUSTED_ORIGINS` in `.env`
+2. Run `sudo docker restart traductor-auth`
+
+### Client-side
+```typescript
+import { createAuthClient } from 'better-auth/client';
+
+const authClient = createAuthClient({
+  baseURL: 'https://auth.niklauss.uk',
+});
+
+await authClient.signIn.email({ email, password });
+await authClient.signUp.email({ email, password, name });
+await authClient.signOut();
+const session = await authClient.getSession();
+```
+
+## Database
+- Use Prisma for all database operations
+- Schema at `prisma/schema.prisma`
+- Run `npx prisma generate` after schema changes
+- Run `npx prisma db push` to sync schema
+
+## Redis
+- Use Upstash REST API (not TCP)
+- Always handle Redis unavailability (fallback to memory)
+- Key patterns:
+  - `ratelimit:{prefix}:{ip}` - Rate limiting
+  - `session:{token}` - Session cache
+  - `blacklist:{hash}` - Token revocation
+  - `usage:{userId}:{date}:{field}` - Usage counters
+
+## Security
+- Never log actual tokens, only hashes
+- Validate all user input with Zod
+- Use parameterized queries (Prisma handles this)
+- Set secure headers via Hono middleware
+
+## Testing
+- Test endpoints with curl
+- Health check: `curl https://auth.niklauss.uk/health`
+
+## Deployment
+- Build: `npm run build`
+- Docker: `docker build -t traductor-auth .`
+- Run: `docker run -d -p 3100:8080 --env-file .env traductor-auth`
+
+## Key Commands
+```bash
+npm run dev          # Development
+npm run build        # Build
+npx prisma studio    # DB GUI
+npx prisma db push   # Sync schema
+```
+
+## Don't
+- Don't use CommonJS require()
+- Don't store plain text tokens
+- Don't expose sensitive env vars in responses
+- Don't use * imports
+- Don't skip error handling
+
+## Important Files
+1. `src/index.ts` - Read first
+2. `src/lib/auth.ts` - Auth configuration
+3. `prisma/schema.prisma` - Database schema
+4. `Dockerfile` - Production build
+5. `.env.production` - Environment vars (don't commit secrets)

@@ -1,0 +1,57 @@
+# ============================================================================
+# Fly.io Configuration - Traductor Auth Server
+# ============================================================================
+# Deploy: fly deploy
+# Logs: fly logs
+# Status: fly status
+# Scale: fly scale count 2 --region mad,iad
+# ============================================================================
+
+app = "traductor-auth"
+primary_region = "mad"  # Madrid - cercano a España/Latam
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8080"
+  # Las variables sensibles van en secrets (fly secrets set KEY=value)
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0  # Scale to zero cuando no hay tráfico
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250
+    soft_limit = 200
+
+  # Health checks
+  [http_service.http_checks]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256  # Suficiente para Node.js básico
+
+# Regiones adicionales para redundancia (opcional)
+# Descomentar cuando tengas más tráfico
+# [[vm]]
+#   cpu_kind = "shared"
+#   cpus = 1
+#   memory_mb = 256
+#   regions = ["iad"]  # Virginia, USA
+
+[metrics]
+  port = 9091
+  path = "/metrics"

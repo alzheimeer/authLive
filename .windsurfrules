@@ -1,0 +1,88 @@
+# Traductor Auth Server
+
+## Overview
+Self-hosted Better Auth server for Traductor Desktop and other applications.
+Production URL: https://auth.niklauss.uk
+Uses Hexagonal Architecture (Ports & Adapters) for easy infrastructure swapping.
+
+## Tech Stack
+- Node.js 20 + TypeScript (ESM, NodeNext)
+- Hono (web framework)
+- Better Auth (authentication)
+- Prisma + Neon PostgreSQL
+- Upstash Redis
+
+## Critical: ESM Imports
+MUST use `.js` extension for relative imports:
+```typescript
+import { auth } from './lib/auth.js';  // CORRECT
+import { auth } from './lib/auth';     // WRONG
+```
+
+## Project Structure
+```
+src/
+├── index.ts           # Server entry point
+├── core/              # Hexagonal architecture
+│   ├── ports/         # Interfaces
+│   └── container.ts   # Dependency injection
+├── adapters/          # Port implementations
+│   ├── database/      # Prisma adapter
+│   ├── cache/         # Upstash/Redis adapters
+│   └── config/        # Env adapter
+├── lib/
+│   ├── auth.ts        # Better Auth config
+│   ├── redis.ts       # Upstash Redis client
+│   └── tokens.ts      # JWT token service
+└── routes/
+    ├── auth.ts        # /api/auth/*
+    ├── tokens.ts      # /api/tokens/*
+    └── usage.ts       # /api/usage/*
+```
+
+## Integrating New Apps
+1. Add origin to `TRUSTED_ORIGINS` in server `.env`
+2. Restart container: `sudo docker restart traductor-auth`
+3. Client-side:
+```typescript
+import { createAuthClient } from 'better-auth/client';
+const authClient = createAuthClient({ baseURL: 'https://auth.niklauss.uk' });
+```
+
+## API Endpoints
+- POST /api/auth/sign-up - Register
+- POST /api/auth/sign-in/email - Login
+- POST /api/auth/sign-out - Logout
+- GET /api/auth/session - Current session
+- POST /api/tokens/ephemeral - Generate JWT (1h)
+- POST /api/tokens/verify - Verify token
+- GET /api/usage - Usage stats
+- GET /health - Health check
+
+## Commands
+```bash
+npm run dev          # Development
+npm run build        # Build TypeScript
+npx prisma studio    # Database GUI
+npx prisma db push   # Sync schema
+```
+
+## Production (AWS EC2)
+```bash
+ssh -i "traductor-auth-key.pem" ec2-user@54.90.128.44
+sudo docker logs traductor-auth
+sudo docker restart traductor-auth
+```
+
+## Code Style
+- Strict TypeScript
+- Async/await over promises
+- Structured error responses
+- Zod for validation
+- Never log plain tokens
+
+## Key Files
+1. src/index.ts - Read first
+2. src/lib/auth.ts - Better Auth config
+3. prisma/schema.prisma - Database schema
+4. Dockerfile - Production build
