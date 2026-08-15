@@ -6,8 +6,8 @@ dist/
 
 # Environment variables (contiene secretos)
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # Database files
 *.db
