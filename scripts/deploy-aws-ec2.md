@@ -18,10 +18,10 @@ aws ec2 authorize-security-group-ingress --group-name traductor-auth-sg --protoc
 aws ec2 authorize-security-group-ingress --group-name traductor-auth-sg --protocol tcp --port 80 --cidr 0.0.0.0/0
 aws ec2 authorize-security-group-ingress --group-name traductor-auth-sg --protocol tcp --port 443 --cidr 0.0.0.0/0
 
-# Lanzar instancia t2.micro (free tier)
+# Lanzar instancia t3.micro (free tier)
 aws ec2 run-instances \
-  --image-id ami-0c02fb55956c7d316 \
-  --instance-type t2.micro \
+  --image-id resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64 \
+  --instance-type t3.micro \
   --key-name traductor-auth-key \
   --security-groups traductor-auth-sg \
   --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=traductor-auth}]'
